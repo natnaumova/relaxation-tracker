@@ -465,7 +465,7 @@ const handleSaveTargets = async () => {
   }) {
     return (
       <Card className="rounded-2xl border-black/5 bg-white shadow-sm">
-        <CardContent>
+        <div className="px-4 py-0">
           <div className="flex items-center justify-between gap-4">
             <div className="min-w-0">
               <p className="text-base font-medium leading-tight">{props.title}</p>
@@ -473,12 +473,13 @@ const handleSaveTargets = async () => {
                 <p className="mt-0.5 text-xs text-slate-500">{props.subtitle}</p>
               ) : null}
             </div>
-  
+    
             <div className="shrink-0">{props.right}</div>
           </div>
-        </CardContent>
+        </div>
       </Card>
     )
+    
   }
   
   
@@ -554,40 +555,68 @@ const handleSaveTargets = async () => {
               {/* Targets (each as its own card) */}
         
               <div className="mt-4 mb-4 space-y-3">
-  <CheckinTile
-    title={targets.labelAvgSleep || "Target 1"}
-    subtitle={`Target: ${targets.targetAvgSleep} hrs`}
-    right={
-      <div className="flex items-center gap-1 rounded-xl border border-black/5 bg-[#F6F7FB] p-1">
+              <Card className="rounded-2xl border-black/5 bg-white shadow-sm">
+              <CardContent className="px-4 py-0">
+
+    {/* Title at the top (full width) */}
+    <p className="text-base font-medium leading-tight">
+      {targets.labelAvgSleep || "Target 1"}
+    </p>
+
+    {/* Stepper */}
+    <div className="mt-2">
+      <div className="flex items-stretch gap-2">
         <Button
           type="button"
-          variant="ghost"
-          className="h-9 w-9 rounded-lg"
-          onClick={() => bumpSleep(-1)}
-          disabled={sleepHours <= SLEEP_MIN}
-          aria-label="Decrease sleep hours"
+          variant="outline"
+          className="h-12 w-12"
+          onClick={() =>
+            setSleepHours((prev) => Math.max(0, Math.round((prev - 0.5) * 2) / 2))
+          }
+          aria-label="Decrease sleep"
         >
           –
         </Button>
-    
-        <div className="min-w-[96px] px-2 text-center text-base font-medium tabular-nums">
-          {formatSleep(sleepHours)} hrs
-        </div>
-    
+
+        <Input
+          value={String(sleepHours)}
+          inputMode="decimal"
+          className="h-12 flex-1 text-center text-base rounded-xl border border-black/5 bg-[#F6F7FB]"
+          onChange={(e) => {
+            const raw = e.target.value
+            // allow typing
+            if (raw === "") return
+            // allow decimals
+            if (!/^\d*\.?\d*$/.test(raw)) return
+            const n = Number(raw)
+            if (!Number.isNaN(n)) {
+              // snap to .5 steps
+              setSleepHours(Math.round(n * 2) / 2)
+            }
+          }}
+        />
+
         <Button
           type="button"
-          variant="ghost"
-          className="h-9 w-9 rounded-lg"
-          onClick={() => bumpSleep(1)}
-          disabled={sleepHours >= SLEEP_MAX}
-          aria-label="Increase sleep hours"
+          variant="outline"
+          className="h-12 w-12"
+          onClick={() =>
+            setSleepHours((prev) => Math.round((prev + 0.5) * 2) / 2)
+          }
+          aria-label="Increase sleep"
         >
           +
         </Button>
       </div>
-    }
-    
-  />
+
+      {/* Target under the stepper */}
+      <p className="mt-2 text-xs text-slate-500">
+        Target: {targets.targetAvgSleep} hrs
+      </p>
+    </div>
+  </CardContent>
+</Card>
+
 
   <CheckinTile
     title={targets.labelLateWork || "Target 2"}
