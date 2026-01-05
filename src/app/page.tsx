@@ -39,57 +39,82 @@ export default function RelaxationTracker() {
     targetYogaDays: 7,
   })
 
+  const [targetsDraft, setTargetsDraft] = useState({
+    targetAvgSleep: "8",
+    maxLateWorkNights: "2",
+    maxReelsDays: "4",
+    targetYogaDays: "7",
+  })
+
     const [targetsMessage, setTargetsMessage] = useState<string | null>(null)
   const [isSavingLog, setIsSavingLog] = useState(false)
   const [isSavingTargets, setIsSavingTargets] = useState(false)
+  const [isBooting, setIsBooting] = useState(true)
 
   
   useEffect(() => {
     const load = async () => {
-      const [{ data: targetsRow, error: targetsError }, { data: logsRows, error: logsError }] =
-        await Promise.all([
-          supabase.from("targets").select("*").eq("singleton", true).maybeSingle(),
-          supabase.from("logs").select("*").order("log_date", { ascending: true }),
-        ])
-  
-      if (targetsError) console.error("Targets load failed:", targetsError)
-      if (logsError) console.error("Logs load failed:", logsError)
-  
-      if (targetsRow) {
-        setTargets({
-          targetAvgSleep: Number(targetsRow.target_avg_sleep),
-          maxLateWorkNights: Number(targetsRow.max_late_work_nights),
-          maxReelsDays: Number(targetsRow.max_reels_days),
-          targetYogaDays: Number(targetsRow.target_yoga_days),
-        })
-      }
-  
-      if (logsRows) {
-        setLogs(
-          logsRows.map((r) => ({
-            date: r.log_date, // <-- from DB
-            sleepHours: Number(r.sleep_hours),
-            workedAfter1930: r.worked_after_1930,
-            watchedReels: r.watched_reels,
-            didYoga: r.did_yoga,
-          }))
-        )
+      try {
+        const [{ data: targetsRow, error: targetsError }, { data: logsRows, error: logsError }] =
+          await Promise.all([
+            supabase.from("targets").select("*").eq("singleton", true).maybeSingle(),
+            supabase.from("logs").select("*").order("log_date", { ascending: true }),
+          ])
+    
+        if (targetsError) console.error("Targets load failed:", targetsError)
+        if (logsError) console.error("Logs load failed:", logsError)
+    
+        if (targetsRow) {
+          setTargets({
+            targetAvgSleep: Number(targetsRow.target_avg_sleep),
+            maxLateWorkNights: Number(targetsRow.max_late_work_nights),
+            maxReelsDays: Number(targetsRow.max_reels_days),
+            targetYogaDays: Number(targetsRow.target_yoga_days),
+          })
+        }
+    
+        if (logsRows) {
+          setLogs(
+            logsRows.map((r) => ({
+              date: r.log_date, // <-- from DB
+              sleepHours: Number(r.sleep_hours),
+              workedAfter1930: r.worked_after_1930,
+              watchedReels: r.watched_reels,
+              didYoga: r.did_yoga,
+            }))
+          )
+        }
+      } finally {
+        // small delay makes it feel intentional
+        setTimeout(() => setIsBooting(false), 350)
       }
     }
   
     load()
   }, [])
-  
+
+  useEffect(() => {
+    setTargetsDraft({
+      targetAvgSleep: String(targets.targetAvgSleep),
+      maxLateWorkNights: String(targets.maxLateWorkNights),
+      maxReelsDays: String(targets.maxReelsDays),
+      targetYogaDays: String(targets.targetYogaDays),
+    })
+  }, [targets])
 
 
   // Form state
-  const getYesterday = () => {
+  const todayYMD = () => {
+    return new Date().toISOString().split("T")[0]
+  }
+
+  const yesterdayYMD = () => {
     const yesterday = new Date()
     yesterday.setDate(yesterday.getDate() - 1)
     return yesterday.toISOString().split("T")[0]
   }
 
-  const [formDate, setFormDate] = useState(getYesterday())
+  const [formDate, setFormDate] = useState(yesterdayYMD())
   const [sleepHours, setSleepHours] = useState(8)
   const [workedAfter1930, setWorkedAfter1930] = useState(false)
   const [watchedReels, setWatchedReels] = useState(false)
@@ -149,13 +174,20 @@ export default function RelaxationTracker() {
   const handleSaveTargets = async () => {
     setIsSavingTargets(true)
 
+    const targetsToSave = {
+      targetAvgSleep: Number(targetsDraft.targetAvgSleep),
+      maxLateWorkNights: Number(targetsDraft.maxLateWorkNights),
+      maxReelsDays: Number(targetsDraft.maxReelsDays),
+      targetYogaDays: Number(targetsDraft.targetYogaDays),
+    }
+
     const { error } = await supabase.from("targets").upsert(
       {
         singleton: true,
-        target_avg_sleep: targets.targetAvgSleep,
-        max_late_work_nights: targets.maxLateWorkNights,
-        max_reels_days: targets.maxReelsDays,
-        target_yoga_days: targets.targetYogaDays,
+        target_avg_sleep: targetsToSave.targetAvgSleep,
+        max_late_work_nights: targetsToSave.maxLateWorkNights,
+        max_reels_days: targetsToSave.maxReelsDays,
+        target_yoga_days: targetsToSave.targetYogaDays,
       },
       { onConflict: "singleton" }
     )
@@ -169,6 +201,7 @@ export default function RelaxationTracker() {
       return
     }
 
+    setTargets(targetsToSave)
     setTargetsMessage("Saved ✓")
     setTimeout(() => setTargetsMessage(null), 2000)
   }
@@ -281,6 +314,84 @@ export default function RelaxationTracker() {
     return date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
   }
 
+  function StepperInput(props: {
+    id: string
+    label: string
+    value: string
+    onChange: (v: string) => void
+    step?: number
+    min?: number
+    max?: number
+  }) {
+    const { id, label, value, onChange, step = 1, min, max } = props
+
+    const clamp = (n: number) => {
+      if (Number.isNaN(n)) return n
+      if (typeof min === "number") n = Math.max(min, n)
+      if (typeof max === "number") n = Math.min(max, n)
+      return n
+    }
+
+    const bump = (delta: number) => {
+      const current = value.trim() === "" ? 0 : Number(value)
+      const next = clamp(current + delta)
+      onChange(String(next))
+    }
+
+    return (
+      <div className="space-y-2">
+        <Label htmlFor={id}>{label}</Label>
+
+        <div className="flex items-stretch gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-12 w-12"
+            onClick={() => bump(-step)}
+            aria-label={`Decrease ${label}`}
+          >
+            –
+          </Button>
+
+          <Input
+            id={id}
+            value={value}
+            inputMode="decimal"
+            className="h-12 text-center text-base"
+            onChange={(e) => {
+              // allow empty (prevents showing 0)
+              const next = e.target.value
+              if (next === "") return onChange("")
+              // allow numbers + decimals
+              if (/^\d*\.?\d*$/.test(next)) onChange(next)
+            }}
+          />
+
+          <Button
+            type="button"
+            variant="outline"
+            className="h-12 w-12"
+            onClick={() => bump(step)}
+            aria-label={`Increase ${label}`}
+          >
+            +
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  if (isBooting) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="text-center space-y-2">
+          <div className="text-2xl font-semibold">Relaxation Tracker</div>
+          <div className="text-sm text-muted-foreground">Loading…</div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex min-h-screen flex-col bg-background pb-20">
       {/* Header */}
@@ -300,7 +411,19 @@ export default function RelaxationTracker() {
             <CardContent className="space-y-6">
               {/* Date Input */}
               <div className="space-y-2">
-                <Label htmlFor="date">Date</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="date">Date</Label>
+
+                  <div className="flex gap-2">
+                    <Button type="button" variant="secondary" size="sm" onClick={() => setFormDate(todayYMD())}>
+                      Today
+                    </Button>
+                    <Button type="button" variant="secondary" size="sm" onClick={() => setFormDate(yesterdayYMD())}>
+                      Yesterday
+                    </Button>
+                  </div>
+                </div>
+
                 <Input
                   id="date"
                   type="date"
@@ -329,26 +452,41 @@ export default function RelaxationTracker() {
               </div>
 
               {/* Boolean Switches */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
+              <div className="space-y-5">
+                <div className="flex min-h-[48px] items-center justify-between">
                   <Label htmlFor="worked" className="flex-1">
                     Worked after 7:30 PM
                   </Label>
-                  <Switch id="worked" checked={workedAfter1930} onCheckedChange={setWorkedAfter1930} />
+                  <Switch
+                    id="worked"
+                    checked={workedAfter1930}
+                    onCheckedChange={setWorkedAfter1930}
+                    className="scale-110"
+                  />
                 </div>
 
-                <div className="flex items-center justify-between">
+                <div className="flex min-h-[48px] items-center justify-between">
                   <Label htmlFor="reels" className="flex-1">
                     Watched reels/shorts
                   </Label>
-                  <Switch id="reels" checked={watchedReels} onCheckedChange={setWatchedReels} />
+                  <Switch
+                    id="reels"
+                    checked={watchedReels}
+                    onCheckedChange={setWatchedReels}
+                    className="scale-110"
+                  />
                 </div>
 
-                <div className="flex items-center justify-between">
+                <div className="flex min-h-[48px] items-center justify-between">
                   <Label htmlFor="yoga" className="flex-1">
                     Did yoga/meditation
                   </Label>
-                  <Switch id="yoga" checked={didYoga} onCheckedChange={setDidYoga} />
+                  <Switch
+                    id="yoga"
+                    checked={didYoga}
+                    onCheckedChange={setDidYoga}
+                    className="scale-110"
+                  />
                 </div>
               </div>
 
@@ -466,54 +604,45 @@ export default function RelaxationTracker() {
               <CardDescription>Adjust your goals</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="targetSleep">Target Average Sleep (hours)</Label>
-                <Input
-                  id="targetSleep"
-                  type="number"
-                  step="0.5"
-                  min="4"
-                  max="12"
-                  value={targets.targetAvgSleep}
-                  onChange={(e) => setTargets({ ...targets, targetAvgSleep: Number(e.target.value) })}
-                />
-              </div>
+              <StepperInput
+                id="targetSleep"
+                label="Target Average Sleep (hours)"
+                value={targetsDraft.targetAvgSleep}
+                step={0.5}
+                min={4}
+                max={12}
+                onChange={(v) => setTargetsDraft((p) => ({ ...p, targetAvgSleep: v }))}
+              />
 
-              <div className="space-y-2">
-                <Label htmlFor="maxLateWork">Max Late Work Nights</Label>
-                <Input
-                  id="maxLateWork"
-                  type="number"
-                  min="0"
-                  max="7"
-                  value={targets.maxLateWorkNights}
-                  onChange={(e) => setTargets({ ...targets, maxLateWorkNights: Number(e.target.value) })}
-                />
-              </div>
+              <StepperInput
+                id="maxLateWork"
+                label="Max Late Work Nights"
+                value={targetsDraft.maxLateWorkNights}
+                step={1}
+                min={0}
+                max={7}
+                onChange={(v) => setTargetsDraft((p) => ({ ...p, maxLateWorkNights: v }))}
+              />
 
-              <div className="space-y-2">
-                <Label htmlFor="maxReels">Max Reels Days</Label>
-                <Input
-                  id="maxReels"
-                  type="number"
-                  min="0"
-                  max="7"
-                  value={targets.maxReelsDays}
-                  onChange={(e) => setTargets({ ...targets, maxReelsDays: Number(e.target.value) })}
-                />
-              </div>
+              <StepperInput
+                id="maxReels"
+                label="Max Reels Days"
+                value={targetsDraft.maxReelsDays}
+                step={1}
+                min={0}
+                max={7}
+                onChange={(v) => setTargetsDraft((p) => ({ ...p, maxReelsDays: v }))}
+              />
 
-              <div className="space-y-2">
-                <Label htmlFor="targetYoga">Target Yoga Days</Label>
-                <Input
-                  id="targetYoga"
-                  type="number"
-                  min="0"
-                  max="7"
-                  value={targets.targetYogaDays}
-                  onChange={(e) => setTargets({ ...targets, targetYogaDays: Number(e.target.value) })}
-                />
-              </div>
+              <StepperInput
+                id="targetYoga"
+                label="Target Yoga Days"
+                value={targetsDraft.targetYogaDays}
+                step={1}
+                min={0}
+                max={7}
+                onChange={(v) => setTargetsDraft((p) => ({ ...p, targetYogaDays: v }))}
+              />
 
               {/* Save Button */}
               <Button onClick={handleSaveTargets} disabled={isSavingTargets} className="w-full">
