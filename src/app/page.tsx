@@ -394,19 +394,17 @@ export default function RelaxationTracker() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background pb-20">
-      {/* Header */}
-      <header className="border-b bg-card px-4 py-6">
-        <h1 className="text-2xl font-semibold text-foreground">Relaxation Tracker</h1>
-        <p className="text-sm text-muted-foreground">Track your wellness journey</p>
-      </header>
-
       {/* Content */}
-      <main className="flex-1 p-4">
+      <main className="flex-1 p-4 pt-6">
         {activeTab === "check-in" && (
           <Card>
             <CardHeader>
-              <CardTitle>Daily Check-in</CardTitle>
-              <CardDescription>Log your relaxation habits</CardDescription>
+              <CardTitle className="text-3xl font-semibold tracking-tight">
+                Daily Check-in
+              </CardTitle>
+              <CardDescription className="text-base">
+                Log your relaxation habits
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               {/* Date Input */}
