@@ -23,6 +23,11 @@ type Targets = {
   maxLateWorkNights: number
   maxReelsDays: number
   targetYogaDays: number
+
+  labelAvgSleep: string
+  labelLateWork: string
+  labelReels: string
+  labelYoga: string
 }
 
 type TabType = "check-in" | "this-week" | "history" | "targets"
@@ -37,6 +42,11 @@ export default function RelaxationTracker() {
     maxLateWorkNights: 2,
     maxReelsDays: 4,
     targetYogaDays: 7,
+  
+    labelAvgSleep: "Average Sleep",
+    labelLateWork: "Late work nights",
+    labelReels: "Reels days",
+    labelYoga: "Yoga / meditation",
   })
 
   const [targetsDraft, setTargetsDraft] = useState({
@@ -46,7 +56,14 @@ export default function RelaxationTracker() {
     targetYogaDays: "7",
   })
 
-    const [targetsMessage, setTargetsMessage] = useState<string | null>(null)
+  const [labelsDraft, setLabelsDraft] = useState({
+    labelAvgSleep: "Target 1",
+    labelLateWork: "Target 2",
+    labelReels: "Target 3",
+    labelYoga: "Target 4",
+  })
+
+  const [targetsMessage, setTargetsMessage] = useState<string | null>(null)
   const [isSavingLog, setIsSavingLog] = useState(false)
   const [isSavingTargets, setIsSavingTargets] = useState(false)
   const [isBooting, setIsBooting] = useState(true)
@@ -55,28 +72,36 @@ export default function RelaxationTracker() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [{ data: targetsRow, error: targetsError }, { data: logsRows, error: logsError }] =
-          await Promise.all([
-            supabase.from("targets").select("*").eq("singleton", true).maybeSingle(),
-            supabase.from("logs").select("*").order("log_date", { ascending: true }),
-          ])
-    
+        const [
+          { data: targetsRow, error: targetsError },
+          { data: logsRows, error: logsError },
+        ] = await Promise.all([
+          supabase.from("targets").select("*").eq("singleton", true).maybeSingle(),
+          supabase.from("logs").select("*").order("log_date", { ascending: true }),
+        ])
+  
         if (targetsError) console.error("Targets load failed:", targetsError)
         if (logsError) console.error("Logs load failed:", logsError)
-    
-        if (targetsRow) {
-          setTargets({
-            targetAvgSleep: Number(targetsRow.target_avg_sleep),
-            maxLateWorkNights: Number(targetsRow.max_late_work_nights),
-            maxReelsDays: Number(targetsRow.max_reels_days),
-            targetYogaDays: Number(targetsRow.target_yoga_days),
-          })
-        }
-    
+  
+          if (targetsRow) {
+            setTargets((prev) => ({
+              ...prev,
+              targetAvgSleep: Number(targetsRow.target_avg_sleep),
+              maxLateWorkNights: targetsRow.max_late_work_nights,
+              maxReelsDays: targetsRow.max_reels_days,
+              targetYogaDays: targetsRow.target_yoga_days,
+          
+              labelAvgSleep: targetsRow.label_avg_sleep ?? prev.labelAvgSleep,
+              labelLateWork: targetsRow.label_late_work ?? prev.labelLateWork,
+              labelReels: targetsRow.label_reels ?? prev.labelReels,
+              labelYoga: targetsRow.label_yoga ?? prev.labelYoga,
+            }))
+          }
+  
         if (logsRows) {
           setLogs(
             logsRows.map((r) => ({
-              date: r.log_date, // <-- from DB
+              date: r.log_date,
               sleepHours: Number(r.sleep_hours),
               workedAfter1930: r.worked_after_1930,
               watchedReels: r.watched_reels,
@@ -85,22 +110,22 @@ export default function RelaxationTracker() {
           )
         }
       } finally {
-        // small delay makes it feel intentional
         setTimeout(() => setIsBooting(false), 350)
       }
     }
   
     load()
   }, [])
-
+  
+  
   useEffect(() => {
-    setTargetsDraft({
-      targetAvgSleep: String(targets.targetAvgSleep),
-      maxLateWorkNights: String(targets.maxLateWorkNights),
-      maxReelsDays: String(targets.maxReelsDays),
-      targetYogaDays: String(targets.targetYogaDays),
+    setLabelsDraft({
+      labelAvgSleep: targets.labelAvgSleep || "Target 1",
+      labelLateWork: targets.labelLateWork || "Target 2",
+      labelReels: targets.labelReels || "Target 3",
+      labelYoga: targets.labelYoga || "Target 4",
     })
-  }, [targets])
+  }, [targets.labelAvgSleep, targets.labelLateWork, targets.labelReels, targets.labelYoga])
 
 
   // Form state
@@ -170,38 +195,60 @@ export default function RelaxationTracker() {
     setTimeout(() => setSaveMessage(null), 2000)
   }
 
-  // Save targets
-  const handleSaveTargets = async () => {
-    setIsSavingTargets(true)
+ // Save targets
+const handleSaveTargets = async () => {
+  setIsSavingTargets(true)
 
-    const targetsToSave = {
-      targetAvgSleep: Number(targetsDraft.targetAvgSleep),
-      maxLateWorkNights: Number(targetsDraft.maxLateWorkNights),
-      maxReelsDays: Number(targetsDraft.maxReelsDays),
-      targetYogaDays: Number(targetsDraft.targetYogaDays),
-    }
+  // If user clears an input, don't save 0 by accident.
+  const numOr = (raw: string, fallback: number) => {
+    const t = raw.trim()
+    if (t === "") return fallback
+    const n = Number(t)
+    return Number.isNaN(n) ? fallback : n
+  }
 
-    const { error } = await supabase.from("targets").upsert(
-      {
-        singleton: true,
-        target_avg_sleep: targetsToSave.targetAvgSleep,
-        max_late_work_nights: targetsToSave.maxLateWorkNights,
-        max_reels_days: targetsToSave.maxReelsDays,
-        target_yoga_days: targetsToSave.targetYogaDays,
-      },
-      { onConflict: "singleton" }
-    )
+  const labelsToSave = {
+    labelAvgSleep: labelsDraft.labelAvgSleep.trim() || "Target 1",
+    labelLateWork: labelsDraft.labelLateWork.trim() || "Target 2",
+    labelReels: labelsDraft.labelReels.trim() || "Target 3",
+    labelYoga: labelsDraft.labelYoga.trim() || "Target 4",
+  }
 
-    setIsSavingTargets(false)
+  const targetsToSave = {
+    targetAvgSleep: numOr(targetsDraft.targetAvgSleep, targets.targetAvgSleep),
+    maxLateWorkNights: numOr(targetsDraft.maxLateWorkNights, targets.maxLateWorkNights),
+    maxReelsDays: numOr(targetsDraft.maxReelsDays, targets.maxReelsDays),
+    targetYogaDays: numOr(targetsDraft.targetYogaDays, targets.targetYogaDays),
+  }
 
-    if (error) {
-      console.error("Save targets failed:", error)
-      setTargetsMessage("Save failed")
-      setTimeout(() => setTargetsMessage(null), 2000)
-      return
-    }
+  const { error } = await supabase.from("targets").upsert(
+    {
+      singleton: true,
+      target_avg_sleep: targetsToSave.targetAvgSleep,
+      max_late_work_nights: targetsToSave.maxLateWorkNights,
+      max_reels_days: targetsToSave.maxReelsDays,
+      target_yoga_days: targetsToSave.targetYogaDays,
 
-    setTargets(targetsToSave)
+      label_avg_sleep: labelsToSave.labelAvgSleep,
+      label_late_work: labelsToSave.labelLateWork,
+      label_reels: labelsToSave.labelReels,
+      label_yoga: labelsToSave.labelYoga,
+    },
+    { onConflict: "singleton" }
+  )
+
+  setIsSavingTargets(false)
+
+  if (error) {
+    console.error("Save targets failed:", error)
+    setTargetsMessage("Save failed")
+    setTimeout(() => setTargetsMessage(null), 2000)
+    return
+  }
+
+
+
+    setTargets((prev) => ({ ...prev, ...targetsToSave }))
     setTargetsMessage("Saved ✓")
     setTimeout(() => setTargetsMessage(null), 2000)
   }
@@ -433,7 +480,7 @@ export default function RelaxationTracker() {
 
               {/* Sleep Hours Picker */}
               <div className="space-y-2">
-                <Label htmlFor="sleep">Sleep Hours</Label>
+              <Label htmlFor="sleep">{targets.labelAvgSleep || "Target 1"}</Label>
                 <select
                   id="sleep"
                   value={sleepHours}
@@ -453,7 +500,7 @@ export default function RelaxationTracker() {
               <div className="space-y-5">
                 <div className="flex min-h-[48px] items-center justify-between">
                   <Label htmlFor="worked" className="flex-1">
-                    Worked after 7:30 PM
+                  {targets.labelLateWork || "Target 2"}
                   </Label>
                   <Switch
                     id="worked"
@@ -465,7 +512,7 @@ export default function RelaxationTracker() {
 
                 <div className="flex min-h-[48px] items-center justify-between">
                   <Label htmlFor="reels" className="flex-1">
-                    Watched reels/shorts
+                  {targets.labelReels || "Target 3"}
                   </Label>
                   <Switch
                     id="reels"
@@ -477,7 +524,7 @@ export default function RelaxationTracker() {
 
                 <div className="flex min-h-[48px] items-center justify-between">
                   <Label htmlFor="yoga" className="flex-1">
-                    Did yoga/meditation
+                  {targets.labelYoga || "Target 4"}
                   </Label>
                   <Switch
                     id="yoga"
@@ -507,7 +554,7 @@ export default function RelaxationTracker() {
           <div className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Average Sleep</CardTitle>
+              <CardTitle>{targets.labelAvgSleep}</CardTitle>
                 <CardDescription>Target: {targets.targetAvgSleep} hours</CardDescription>
               </CardHeader>
               <CardContent>
@@ -522,7 +569,7 @@ export default function RelaxationTracker() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Late Work Nights</CardTitle>
+              <CardTitle>{targets.labelLateWork}</CardTitle>
                 <CardDescription>Max: {targets.maxLateWorkNights} nights</CardDescription>
               </CardHeader>
               <CardContent>
@@ -535,7 +582,7 @@ export default function RelaxationTracker() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Reels Days</CardTitle>
+              <CardTitle>{targets.labelReels}</CardTitle>
                 <CardDescription>Max: {targets.maxReelsDays} days</CardDescription>
               </CardHeader>
               <CardContent>
@@ -548,7 +595,7 @@ export default function RelaxationTracker() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Yoga Days</CardTitle>
+              <CardTitle>{targets.labelYoga}</CardTitle>
                 <CardDescription>Target: {targets.targetYogaDays} days</CardDescription>
               </CardHeader>
               <CardContent>
@@ -602,9 +649,48 @@ export default function RelaxationTracker() {
               <CardDescription>Adjust your goals</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+            <div className="space-y-4">
+            <div className="space-y-2">
+  <Label htmlFor="t1Name">Target 1 name</Label>
+  <Input
+    id="t1Name"
+    value={labelsDraft.labelAvgSleep}
+onChange={(e) => setLabelsDraft((p) => ({ ...p, labelAvgSleep: e.target.value }))}
+
+  />
+</div>
+
+<div className="space-y-2">
+  <Label htmlFor="t2Name">Target 2 name</Label>
+  <Input
+    id="t2Name"
+    value={labelsDraft.labelLateWork}
+    onChange={(e) => setLabelsDraft((p) => ({ ...p, labelLateWork: e.target.value }))}
+  />
+</div>
+
+<div className="space-y-2">
+  <Label htmlFor="t3Name">Target 3 name</Label>
+  <Input
+    id="t3Name"
+    value={labelsDraft.labelReels}
+    onChange={(e) => setLabelsDraft((p) => ({ ...p, labelReels: e.target.value }))}
+  />
+</div>
+
+<div className="space-y-2">
+  <Label htmlFor="t4Name">Target 4 name</Label>
+  <Input
+    id="t4Name"
+    value={labelsDraft.labelYoga}
+    onChange={(e) => setLabelsDraft((p) => ({ ...p, labelYoga: e.target.value }))}
+  />
+</div>
+</div>
+
               <StepperInput
                 id="targetSleep"
-                label="Target Average Sleep (hours)"
+                label={targets.labelAvgSleep || "Target 1"}
                 value={targetsDraft.targetAvgSleep}
                 step={0.5}
                 min={4}
@@ -614,7 +700,7 @@ export default function RelaxationTracker() {
 
               <StepperInput
                 id="maxLateWork"
-                label="Max Late Work Nights"
+                label={targets.labelLateWork || "Target 2"}
                 value={targetsDraft.maxLateWorkNights}
                 step={1}
                 min={0}
@@ -624,7 +710,7 @@ export default function RelaxationTracker() {
 
               <StepperInput
                 id="maxReels"
-                label="Max Reels Days"
+                label={targets.labelReels || "Target 3"}
                 value={targetsDraft.maxReelsDays}
                 step={1}
                 min={0}
@@ -634,7 +720,7 @@ export default function RelaxationTracker() {
 
               <StepperInput
                 id="targetYoga"
-                label="Target Yoga Days"
+                label={targets.labelYoga || "Target 4"}
                 value={targetsDraft.targetYogaDays}
                 step={1}
                 min={0}
