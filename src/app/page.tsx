@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import type React from "react"
 import { supabase } from "@/lib/supabaseClient"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -8,7 +9,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
-import { ClipboardCheck, TrendingUp, History, Target } from "lucide-react"
+import { ClipboardCheck, TrendingUp, History, Target, Moon, Briefcase, Smartphone, Sparkles } from "lucide-react"
+
 
 type DailyLog = {
   date: string
@@ -127,7 +129,15 @@ export default function RelaxationTracker() {
     })
   }, [targets.labelAvgSleep, targets.labelLateWork, targets.labelReels, targets.labelYoga])
 
-
+  useEffect(() => {
+    setTargetsDraft({
+      targetAvgSleep: String(targets.targetAvgSleep),
+      maxLateWorkNights: String(targets.maxLateWorkNights),
+      maxReelsDays: String(targets.maxReelsDays),
+      targetYogaDays: String(targets.targetYogaDays),
+    })
+  }, [targets.targetAvgSleep, targets.maxLateWorkNights, targets.maxReelsDays, targets.targetYogaDays])
+  
   // Form state
   const todayYMD = () => {
     return new Date().toISOString().split("T")[0]
@@ -141,6 +151,21 @@ export default function RelaxationTracker() {
 
   const [formDate, setFormDate] = useState(yesterdayYMD())
   const [sleepHours, setSleepHours] = useState(8)
+  const SLEEP_MIN = 4
+const SLEEP_MAX = 12
+const SLEEP_STEP = 0.5
+
+const formatSleep = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
+
+const bumpSleep = (delta: number) => {
+  setSleepHours((prev) => {
+    // avoid float drift by working in "steps"
+    const steps = Math.round(prev / SLEEP_STEP)
+    const next = (steps + delta) * SLEEP_STEP
+    return Math.min(SLEEP_MAX, Math.max(SLEEP_MIN, next))
+  })
+}
+
   const [workedAfter1930, setWorkedAfter1930] = useState(false)
   const [watchedReels, setWatchedReels] = useState(false)
   const [didYoga, setDidYoga] = useState(false)
@@ -195,7 +220,9 @@ export default function RelaxationTracker() {
     setTimeout(() => setSaveMessage(null), 2000)
   }
 
- // Save targets
+ 
+
+// Save targets
 const handleSaveTargets = async () => {
   setIsSavingTargets(true)
 
@@ -246,12 +273,17 @@ const handleSaveTargets = async () => {
     return
   }
 
+  // IMPORTANT: update BOTH numbers + labels in app state
+  setTargets((prev) => ({
+    ...prev,
+    ...targetsToSave,
+    ...labelsToSave,
+  }))
 
+  setTargetsMessage("Saved ✓")
+  setTimeout(() => setTargetsMessage(null), 2000)
+}
 
-    setTargets((prev) => ({ ...prev, ...targetsToSave }))
-    setTargetsMessage("Saved ✓")
-    setTimeout(() => setTargetsMessage(null), 2000)
-  }
 
   // Load log for editing
   const loadLog = (log: DailyLog) => {
@@ -371,24 +403,24 @@ const handleSaveTargets = async () => {
     max?: number
   }) {
     const { id, label, value, onChange, step = 1, min, max } = props
-
+  
     const clamp = (n: number) => {
       if (Number.isNaN(n)) return n
       if (typeof min === "number") n = Math.max(min, n)
       if (typeof max === "number") n = Math.min(max, n)
       return n
     }
-
+  
     const bump = (delta: number) => {
       const current = value.trim() === "" ? 0 : Number(value)
       const next = clamp(current + delta)
       onChange(String(next))
     }
-
+  
     return (
       <div className="space-y-2">
         <Label htmlFor={id}>{label}</Label>
-
+  
         <div className="flex items-stretch gap-2">
           <Button
             type="button"
@@ -399,21 +431,19 @@ const handleSaveTargets = async () => {
           >
             –
           </Button>
-
+  
           <Input
             id={id}
             value={value}
             inputMode="decimal"
             className="h-12 text-center text-base"
             onChange={(e) => {
-              // allow empty (prevents showing 0)
               const next = e.target.value
               if (next === "") return onChange("")
-              // allow numbers + decimals
               if (/^\d*\.?\d*$/.test(next)) onChange(next)
             }}
           />
-
+  
           <Button
             type="button"
             variant="outline"
@@ -427,24 +457,38 @@ const handleSaveTargets = async () => {
       </div>
     )
   }
-
-  if (isBooting) {
+  
+  function CheckinTile(props: {
+    title: string
+    subtitle?: string
+    right: React.ReactNode
+  }) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="text-center space-y-2">
-          <div className="text-2xl font-semibold">Relaxation Tracker</div>
-          <div className="text-sm text-muted-foreground">Loading…</div>
-        </div>
-      </div>
+      <Card className="rounded-2xl border-black/5 bg-white shadow-sm">
+        <CardContent>
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-base font-medium leading-tight">{props.title}</p>
+              {props.subtitle ? (
+                <p className="mt-0.5 text-xs text-slate-500">{props.subtitle}</p>
+              ) : null}
+            </div>
+  
+            <div className="shrink-0">{props.right}</div>
+          </div>
+        </CardContent>
+      </Card>
     )
   }
+  
+  
 
   return (
-    <div className="flex min-h-screen flex-col bg-background pb-20">
-      {/* Content */}
-      <main className="flex-1 p-4 pt-6">
+    <div className="min-h-screen bg-[#F6F7FB] pb-24">
+  <main className="mx-auto w-full max-w-md p-4 pt-6">
+
         {activeTab === "check-in" && (
-          <Card>
+          <Card className="rounded-2xl border border-black/5 bg-white shadow-sm">
             <CardHeader>
               <CardTitle className="text-3xl font-semibold tracking-tight">
                 Daily Check-in
@@ -453,20 +497,49 @@ const handleSaveTargets = async () => {
                 Log your relaxation habits
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent>
+
               {/* Date Input */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="date">Date</Label>
 
-                  <div className="flex gap-2">
-                    <Button type="button" variant="secondary" size="sm" onClick={() => setFormDate(todayYMD())}>
-                      Today
-                    </Button>
-                    <Button type="button" variant="secondary" size="sm" onClick={() => setFormDate(yesterdayYMD())}>
-                      Yesterday
-                    </Button>
-                  </div>
+                  {(() => {
+  const today = todayYMD()
+  const yesterday = yesterdayYMD()
+
+  const isToday = formDate === today
+  const isYesterday = formDate === yesterday
+
+  const pillBase = "h-9 rounded-full px-4 text-sm font-medium"
+  const pillActive = "bg-white shadow-sm text-foreground"
+  const pillInactive = "text-muted-foreground hover:bg-white/60"
+
+  return (
+    <div className="flex items-center gap-1 rounded-full bg-muted p-1">
+      <Button
+        type="button"
+        variant="ghost"
+        aria-pressed={isYesterday}
+        className={`${pillBase} ${isYesterday ? pillActive : pillInactive}`}
+        onClick={() => setFormDate(yesterday)}
+      >
+        Yesterday
+      </Button>
+
+      <Button
+        type="button"
+        variant="ghost"
+        aria-pressed={isToday}
+        className={`${pillBase} ${isToday ? pillActive : pillInactive}`}
+        onClick={() => setFormDate(today)}
+      >
+        Today
+      </Button>
+    </div>
+  )
+})()}
+
                 </div>
 
                 <Input
@@ -478,62 +551,82 @@ const handleSaveTargets = async () => {
                 />
               </div>
 
-              {/* Sleep Hours Picker */}
-              <div className="space-y-2">
-              <Label htmlFor="sleep">{targets.labelAvgSleep || "Target 1"}</Label>
-                <select
-                  id="sleep"
-                  value={sleepHours}
-                  onChange={(e) => setSleepHours(Number(e.target.value))}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  {Array.from({ length: 17 }, (_, i) => 4 + i * 0.5).map((hours) => (
-                    <option key={hours} value={hours}>
-                      {hours} hours
-                    </option>
-                  ))}
-                </select>
-                {sleepHours >= 8 && <p className="text-sm text-muted-foreground">✓ Slept at least 8 hours</p>}
-              </div>
+              {/* Targets (each as its own card) */}
+        
+              <div className="mt-4 mb-4 space-y-3">
+  <CheckinTile
+    title={targets.labelAvgSleep || "Target 1"}
+    subtitle={`Target: ${targets.targetAvgSleep} hrs`}
+    right={
+      <div className="flex items-center gap-1 rounded-xl border border-black/5 bg-[#F6F7FB] p-1">
+        <Button
+          type="button"
+          variant="ghost"
+          className="h-9 w-9 rounded-lg"
+          onClick={() => bumpSleep(-1)}
+          disabled={sleepHours <= SLEEP_MIN}
+          aria-label="Decrease sleep hours"
+        >
+          –
+        </Button>
+    
+        <div className="min-w-[96px] px-2 text-center text-base font-medium tabular-nums">
+          {formatSleep(sleepHours)} hrs
+        </div>
+    
+        <Button
+          type="button"
+          variant="ghost"
+          className="h-9 w-9 rounded-lg"
+          onClick={() => bumpSleep(1)}
+          disabled={sleepHours >= SLEEP_MAX}
+          aria-label="Increase sleep hours"
+        >
+          +
+        </Button>
+      </div>
+    }
+    
+  />
 
-              {/* Boolean Switches */}
-              <div className="space-y-5">
-                <div className="flex min-h-[48px] items-center justify-between">
-                  <Label htmlFor="worked" className="flex-1">
-                  {targets.labelLateWork || "Target 2"}
-                  </Label>
-                  <Switch
-                    id="worked"
-                    checked={workedAfter1930}
-                    onCheckedChange={setWorkedAfter1930}
-                    className="scale-110"
-                  />
-                </div>
+  <CheckinTile
+    title={targets.labelLateWork || "Target 2"}
+    right={
+      <Switch
+        id="worked"
+        checked={workedAfter1930}
+        onCheckedChange={setWorkedAfter1930}
+        className="scale-110"
+      />
+    }
+  />
 
-                <div className="flex min-h-[48px] items-center justify-between">
-                  <Label htmlFor="reels" className="flex-1">
-                  {targets.labelReels || "Target 3"}
-                  </Label>
-                  <Switch
-                    id="reels"
-                    checked={watchedReels}
-                    onCheckedChange={setWatchedReels}
-                    className="scale-110"
-                  />
-                </div>
+  <CheckinTile
+    title={targets.labelReels || "Target 3"}
+    right={
+      <Switch
+        id="reels"
+        checked={watchedReels}
+        onCheckedChange={setWatchedReels}
+        className="scale-110"
+      />
+    }
+  />
 
-                <div className="flex min-h-[48px] items-center justify-between">
-                  <Label htmlFor="yoga" className="flex-1">
-                  {targets.labelYoga || "Target 4"}
-                  </Label>
-                  <Switch
-                    id="yoga"
-                    checked={didYoga}
-                    onCheckedChange={setDidYoga}
-                    className="scale-110"
-                  />
-                </div>
-              </div>
+  <CheckinTile
+    title={targets.labelYoga || "Target 4"}
+    right={
+      <Switch
+        id="yoga"
+        checked={didYoga}
+        onCheckedChange={setDidYoga}
+        className="scale-110"
+      />
+    }
+  />
+</div>
+
+
 
               {/* Save Button */}
 <Button onClick={handleSave} disabled={isSavingLog} className="w-full">
@@ -552,12 +645,14 @@ const handleSaveTargets = async () => {
 
         {activeTab === "this-week" && (
           <div className="space-y-4">
-            <Card>
-              <CardHeader>
+            <Card className="rounded-2xl border border-black/5 bg-white shadow-sm">
+            <CardHeader>
+
               <CardTitle>{targets.labelAvgSleep}</CardTitle>
                 <CardDescription>Target: {targets.targetAvgSleep} hours</CardDescription>
               </CardHeader>
               <CardContent>
+
                 <div className="flex items-center justify-between">
                   <p className="text-3xl font-semibold">
                     {weekMetrics.avgSleep > 0 ? weekMetrics.avgSleep.toFixed(1) : "—"}
@@ -567,12 +662,14 @@ const handleSaveTargets = async () => {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
+            <Card className="rounded-2xl border border-black/5 bg-white shadow-sm">
+            <CardHeader>
+
               <CardTitle>{targets.labelLateWork}</CardTitle>
                 <CardDescription>Max: {targets.maxLateWorkNights} nights</CardDescription>
               </CardHeader>
               <CardContent>
+
                 <div className="flex items-center justify-between">
                   <p className="text-3xl font-semibold">{weekMetrics.lateWorkNights}</p>
                   {renderBadge(weekMetrics.lateWorkStatus)}
@@ -580,12 +677,14 @@ const handleSaveTargets = async () => {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
+            <Card className="rounded-2xl border border-black/5 bg-white shadow-sm">
+            <CardHeader>
+
               <CardTitle>{targets.labelReels}</CardTitle>
                 <CardDescription>Max: {targets.maxReelsDays} days</CardDescription>
               </CardHeader>
               <CardContent>
+
                 <div className="flex items-center justify-between">
                   <p className="text-3xl font-semibold">{weekMetrics.reelsDays}</p>
                   {renderBadge(weekMetrics.reelsStatus)}
@@ -593,12 +692,14 @@ const handleSaveTargets = async () => {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
+            <Card className="rounded-2xl border border-black/5 bg-white shadow-sm">
+            <CardHeader>
+
               <CardTitle>{targets.labelYoga}</CardTitle>
                 <CardDescription>Target: {targets.targetYogaDays} days</CardDescription>
               </CardHeader>
               <CardContent>
+
                 <div className="flex items-center justify-between">
                   <p className="text-3xl font-semibold">{weekMetrics.yogaDays}</p>
                   {renderBadge(weekMetrics.yogaStatus)}
@@ -609,12 +710,14 @@ const handleSaveTargets = async () => {
         )}
 
         {activeTab === "history" && (
-          <Card>
+          <Card className="rounded-2xl border border-black/5 bg-white shadow-sm">
             <CardHeader>
+
               <CardTitle>History</CardTitle>
               <CardDescription>Your logged entries</CardDescription>
             </CardHeader>
             <CardContent>
+
               {logs.length === 0 ? (
                 <p className="text-center text-muted-foreground">No logs yet</p>
               ) : (
@@ -628,12 +731,31 @@ const handleSaveTargets = async () => {
                         className="w-full rounded-lg border bg-card p-4 text-left transition-colors hover:bg-accent"
                       >
                         <p className="font-medium">{formatDate(log.date)}</p>
-                        <div className="mt-2 flex flex-wrap gap-2 text-sm text-muted-foreground">
-                          <span>💤 {log.sleepHours}h</span>
-                          {log.workedAfter1930 && <span>💼 Late work</span>}
-                          {log.watchedReels && <span>📱 Reels</span>}
-                          {log.didYoga && <span>🧘 Yoga</span>}
-                        </div>
+                        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+  <span>{targets.labelAvgSleep || "Target 1"}: {log.sleepHours}h</span>
+
+  {log.workedAfter1930 && (
+    <>
+      <span className="text-slate-300">•</span>
+      <span>{targets.labelLateWork || "Target 2"}</span>
+    </>
+  )}
+
+  {log.watchedReels && (
+    <>
+      <span className="text-slate-300">•</span>
+      <span>{targets.labelReels || "Target 3"}</span>
+    </>
+  )}
+
+  {log.didYoga && (
+    <>
+      <span className="text-slate-300">•</span>
+      <span>{targets.labelYoga || "Target 4"}</span>
+    </>
+  )}
+</div>
+
                       </button>
                     ))}
                 </div>
@@ -643,109 +765,119 @@ const handleSaveTargets = async () => {
         )}
 
         {activeTab === "targets" && (
-          <Card>
+          <Card className="rounded-2xl border border-black/5 bg-white shadow-sm">
             <CardHeader>
+
               <CardTitle>Weekly Targets</CardTitle>
               <CardDescription>Adjust your goals</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-            <div className="space-y-4">
-            <div className="space-y-2">
-  <Label htmlFor="t1Name">Target 1 name</Label>
-  <Input
-    id="t1Name"
-    value={labelsDraft.labelAvgSleep}
-onChange={(e) => setLabelsDraft((p) => ({ ...p, labelAvgSleep: e.target.value }))}
+            <CardContent className="p-4 pt-0 space-y-6">
+  {/* Target names */}
+  <div className="space-y-5">
+    <div className="space-y-2">
+      <Label htmlFor="t1Name">Target 1 name</Label>
+      <Input
+        id="t1Name"
+        value={labelsDraft.labelAvgSleep}
+        onChange={(e) => setLabelsDraft((p) => ({ ...p, labelAvgSleep: e.target.value }))}
+      />
+    </div>
 
-  />
-</div>
+    <div className="space-y-2">
+      <Label htmlFor="t2Name">Target 2 name</Label>
+      <Input
+        id="t2Name"
+        value={labelsDraft.labelLateWork}
+        onChange={(e) => setLabelsDraft((p) => ({ ...p, labelLateWork: e.target.value }))}
+      />
+    </div>
 
-<div className="space-y-2">
-  <Label htmlFor="t2Name">Target 2 name</Label>
-  <Input
-    id="t2Name"
-    value={labelsDraft.labelLateWork}
-    onChange={(e) => setLabelsDraft((p) => ({ ...p, labelLateWork: e.target.value }))}
-  />
-</div>
+    <div className="space-y-2">
+      <Label htmlFor="t3Name">Target 3 name</Label>
+      <Input
+        id="t3Name"
+        value={labelsDraft.labelReels}
+        onChange={(e) => setLabelsDraft((p) => ({ ...p, labelReels: e.target.value }))}
+      />
+    </div>
 
-<div className="space-y-2">
-  <Label htmlFor="t3Name">Target 3 name</Label>
-  <Input
-    id="t3Name"
-    value={labelsDraft.labelReels}
-    onChange={(e) => setLabelsDraft((p) => ({ ...p, labelReels: e.target.value }))}
-  />
-</div>
+    <div className="space-y-2">
+      <Label htmlFor="t4Name">Target 4 name</Label>
+      <Input
+        id="t4Name"
+        value={labelsDraft.labelYoga}
+        onChange={(e) => setLabelsDraft((p) => ({ ...p, labelYoga: e.target.value }))}
+      />
+    </div>
+  </div>
 
-<div className="space-y-2">
-  <Label htmlFor="t4Name">Target 4 name</Label>
-  <Input
-    id="t4Name"
-    value={labelsDraft.labelYoga}
-    onChange={(e) => setLabelsDraft((p) => ({ ...p, labelYoga: e.target.value }))}
-  />
-</div>
-</div>
+  {/* Spacer / divider */}
+  <div className="h-px w-full bg-black/5" />
 
-              <StepperInput
-                id="targetSleep"
-                label={targets.labelAvgSleep || "Target 1"}
-                value={targetsDraft.targetAvgSleep}
-                step={0.5}
-                min={4}
-                max={12}
-                onChange={(v) => setTargetsDraft((p) => ({ ...p, targetAvgSleep: v }))}
-              />
+  {/* Target numbers */}
+  <div className="space-y-5">
+    <StepperInput
+      id="targetSleep"
+      label={targets.labelAvgSleep || "Target 1"}
+      value={targetsDraft.targetAvgSleep}
+      step={0.5}
+      min={4}
+      max={12}
+      onChange={(v) => setTargetsDraft((p) => ({ ...p, targetAvgSleep: v }))}
+    />
 
-              <StepperInput
-                id="maxLateWork"
-                label={targets.labelLateWork || "Target 2"}
-                value={targetsDraft.maxLateWorkNights}
-                step={1}
-                min={0}
-                max={7}
-                onChange={(v) => setTargetsDraft((p) => ({ ...p, maxLateWorkNights: v }))}
-              />
+    <StepperInput
+      id="maxLateWork"
+      label={targets.labelLateWork || "Target 2"}
+      value={targetsDraft.maxLateWorkNights}
+      step={1}
+      min={0}
+      max={7}
+      onChange={(v) => setTargetsDraft((p) => ({ ...p, maxLateWorkNights: v }))}
+    />
 
-              <StepperInput
-                id="maxReels"
-                label={targets.labelReels || "Target 3"}
-                value={targetsDraft.maxReelsDays}
-                step={1}
-                min={0}
-                max={7}
-                onChange={(v) => setTargetsDraft((p) => ({ ...p, maxReelsDays: v }))}
-              />
+    <StepperInput
+      id="maxReels"
+      label={targets.labelReels || "Target 3"}
+      value={targetsDraft.maxReelsDays}
+      step={1}
+      min={0}
+      max={7}
+      onChange={(v) => setTargetsDraft((p) => ({ ...p, maxReelsDays: v }))}
+    />
 
-              <StepperInput
-                id="targetYoga"
-                label={targets.labelYoga || "Target 4"}
-                value={targetsDraft.targetYogaDays}
-                step={1}
-                min={0}
-                max={7}
-                onChange={(v) => setTargetsDraft((p) => ({ ...p, targetYogaDays: v }))}
-              />
+    <StepperInput
+      id="targetYoga"
+      label={targets.labelYoga || "Target 4"}
+      value={targetsDraft.targetYogaDays}
+      step={1}
+      min={0}
+      max={7}
+      onChange={(v) => setTargetsDraft((p) => ({ ...p, targetYogaDays: v }))}
+    />
+  </div>
 
-              {/* Save Button */}
-              <Button onClick={handleSaveTargets} disabled={isSavingTargets} className="w-full">
-                {isSavingTargets ? "Saving..." : "Save targets"}
-              </Button>
+  {/* Save Button */}
+  <Button onClick={handleSaveTargets} disabled={isSavingTargets} className="w-full">
+    {isSavingTargets ? "Saving..." : "Save targets"}
+  </Button>
 
-              {targetsMessage && (
-                <div className="mt-3 rounded-md border bg-green-50 px-3 py-2 text-sm text-green-800">
-                  {targetsMessage}
-                </div>
-              )}
-            </CardContent>
+  {targetsMessage && (
+    <div className="mt-2 rounded-md border bg-green-50 px-3 py-2 text-sm text-green-800">
+      {targetsMessage}
+    </div>
+  )}
+</CardContent>
+
           </Card>
         )}
       </main>
 
       {/* Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 border-t bg-card">
-        <div className="grid grid-cols-4">
+      <nav className="fixed bottom-4 left-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-2xl border border-black/5 bg-white/90 shadow-lg backdrop-blur">
+
+      <div className="grid grid-cols-4 px-2">
+
           <button
             onClick={() => setActiveTab("check-in")}
             className={`flex flex-col items-center gap-1 py-3 transition-colors ${
